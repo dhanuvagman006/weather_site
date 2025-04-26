@@ -122,6 +122,13 @@
       document.documentElement.classList.add('dark');
     }
 
+    if(localStorage.getItem('isloggedin')){
+      alert("User Logged in")
+    }else{
+      // alert("User Logged Out")
+      window.location.href = './login';
+    }
+
     function showError(message) {
       const result = document.getElementById('result');
       result.classList.remove('hidden');

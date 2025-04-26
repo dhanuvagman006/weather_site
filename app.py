@@ -1,16 +1,18 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, redirect, url_for
 from flask_cors import CORS
 import requests
 import os
 from dotenv import load_dotenv
 from functools import lru_cache
 from datetime import datetime, timedelta
+import json
 
-# Load environment variables
+
 load_dotenv()
+file_path = 'users.json'
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000"]}})  # Restrict in production
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000"]}})
 
 API_KEY = os.getenv('OPENWEATHER_API_KEY')
 if not API_KEY:
@@ -18,17 +20,80 @@ if not API_KEY:
 
 BASE_URL = "https://api.openweathermap.org/data/2.5"
 
-# Cache weather responses for 10 minutes
 @lru_cache(maxsize=100)
 def cached_weather_request(url, timeout=5):
     response = requests.get(url, timeout=timeout)
     response.raise_for_status()
     return response.json()
 
+def load_users():
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            try:
+                data = json.load(f)
+                return data.get('users', [])
+            except json.JSONDecodeError:
+                return []
+    return []
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        if not email or not password:
+            return ("<h1>Cannot Have Empty Emails and Password</h1>")
+
+        users = load_users()
+        for user in users:
+            if user['email'] == email and user['password'] == password:
+                return redirect(url_for('dashboard'))
+
+        return "Invalid email or password", 401
+
+    return render_template('Loginpage.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register_page():
+    if request.method == 'POST':
+        user_data = {
+            "name": request.form['name'],
+            "email": request.form['email'],
+            "phone": request.form['phone'],
+            "password": request.form['password']
+        }
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                try:
+                    data = json.load(f)
+                    if not isinstance(data, dict):
+                        data = {"users": []}
+                except json.JSONDecodeError:
+                    data = {"users": []}
+        else:
+            data = {"users": []}
+
+        data['users'].append(user_data)
+
+        with open(file_path, 'w') as f:
+            json.dump(data, f, indent=4)
+
+        return redirect(url_for('success'))
+
+    return render_template('Register.html')
+
+@app.route('/success')
+def success():
+    return render_template('Success.html')
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('Homepage.html')
+
 @app.route('/')
 def index():
     return render_template('index.html')
-
+    
 @app.route('/get-weather')
 def get_weather():
     city = request.args.get('city')
@@ -167,4 +232,4 @@ def get_city_suggestions():
         return jsonify({'cod': 500, 'message': f'Failed to fetch city suggestions: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)
